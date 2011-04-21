@@ -25,54 +25,59 @@ Proof.
     reflexivity.
 Qed.
 
+Ltac xinduction_noheap_base_lt lt ::=
+  first   
+    [ eapply (spec_induction_1_noheap (lt:=lt))
+    | eapply (spec_induction_2_noheap (lt:=lt))
+    | eapply (spec_induction_3_noheap (lt:=lt)) 
+    | eapply (spec_induction_4_noheap (lt:=lt)) 
+    | eapply (spec_induction_2_noheap (lt:=uncurryp2 lt))
+    | eapply (spec_induction_3_noheap (lt:=uncurryp3 lt))
+    | eapply (spec_induction_4_noheap (lt:=uncurryp4 lt)) ];
+  [ try prove_wf | try xisspec |unfolds_wf ].
+
 Lemma iter_spec :forall A,
   Spec iter f l |R>> forall (I:list A->hprop),
-    (forall x t, (App f x;) (I (x::t)) (# I t)) -> 
+    (forall x t, (App f x;) (I (x::t)) (# I t)) ->
     R (I l) (# I nil).
 Proof.
   intro A.
-  xintros.
-  intros f l I PRE.
-  apply app_spec_2.
-
-  induction l.
-
-  xcf. intros. subst.
-  xmatch. xret. auto.
-
-  xcf. intros; subst. xmatch.
-  xseq; eauto. xapp*. auto.
+  xinduction (unproj22 func (@list_sub A)).
+  xcf. intros f l IH * Sf.
+  xgo; auto. hsimpl.
 Qed.
 
 Lemma length_aux_spec: forall A,
   Spec length_aux (len: int) (l: list A) |R>>
     keep R [] (\= ((Datatypes.length l) + len)).
 Proof.
-  intro. xintros.
-  intros len l.
-  apply app_spec_2. revert len.
-  induction l;intro len; xcf; intros; subst.
-
+(*  intro. xintros.
+  intros len l. revert len.
+  induction_wf: (@list_sub_wf A) l.
+  intro. xcf_app.
   xgo.
+  xapply IH. auto. hsimpl. hsimpl. simpl. math.*)
 
-  xgo. reflexivity. reflexivity.
-  simpl.
-  replace (S(Datatypes.length l) + len) with (Datatypes.length l + (len + 1)).
-  eauto. math.
+  intro A. xinduction (unproj22 int (@list_sub A)).
+  xcf. intros.
+  xmatch. xret. xapp. auto.
+  hsimpl. simpl. math.
 Qed.
 
 Hint Extern 1 (RegisterSpec length_aux) => Provide length_aux_spec.
 
 
+
 Lemma length_spec: forall A,
   Spec length (l: list A) |R>>
-    keep R [] (\= my_Z_of_nat (Datatypes.length l)).
+    keep R [] (\= (Datatypes.length l:int)).
 Proof.
   intro A. xcf.
   intro l.
-  xapp. rewrite Zplus_0_r.
-  eauto.
+  xapp.
+  hsimpl. math.
 Qed.
+
 
 Hint Extern 1 (RegisterSpec length) => Provide length_spec.
 
@@ -101,30 +106,35 @@ Lemma nth_spec: forall A,
     R [] (fun res=> [List.nth_error l (Zabs_nat n) = Some res]).
 Proof.
   intro A.
-  xintros. intros l n SUP INF.
-(*  remember (abs n) as m.
-  replace n with (Z_of_nat m) in * by (subst; apply abs_pos; auto).
-  clear dependent n.
-  assert (m < Datatypes.length l). math. clear INF. clear Heqm.*)
+  xcf. intros * POS INF.
+  xif. xfail. math.
 
-  apply app_spec_2. xcf. intros; subst.
-  xif. math.
+(*  xfun_noxbody (fun f => Spec f (l: list A) (n: int) |R>> (0 <=n) -> (n < List.length l) ->
+    R [] (fun res=> [List.nth_error l (Zabs_nat n) = Some res])).
 
-  clear C.
-  xlet
-    (fun nth_aux => Spec nth_aux (l':list A) (n':int) |R>>
-      (0 <=n') -> (n' < List.length l') ->
-      R [] (fun res=> [List.nth_error l' (Zabs_nat n') = Some res])).
-  intros.
-  xintros. skip.
-  intros l' n' SUP' INF'.
-  remember (abs n') as m'.
-  replace n' with (Z_of_nat m') in * by (subst; apply abs_pos; auto).
-  clear dependent n'.
-  assert (m' < Datatypes.length l'). math. clear INF'. clear Heqm'.
-  apply app_spec_2.
-  revert dependent m'. induction l'; intros.
-Admitted.
+  xinduction (unproj21 int (@list_sub A)).
+  xbody.*)
+  xfun_induction (fun f => Spec f (l: list A) (n: int) |R>> (0 <=n) -> (n < List.length l) ->
+    R [] (fun res=> [List.nth_error l (Zabs_nat n) = Some res])) (unproj21 int (@list_sub A)).
+  intros SPEC POS' INF'.
+  Tactic Notation "xval" :=
+    apply local_erase; intro; let x := get_last_hyp tt in revert x; xval as x.
+
+  Tactic Notation "xvals" :=
+    apply local_erase; intro; intro_subst.
+
+  xvals.
+  xmatch. xfail. simpl in INF'. math.
+
+  xif. xret. hsimpl. change (abs 0) with O. simpl. reflexivity.
+
+  xapp; auto. math.  simpl in *. math. hsimpl.
+  math_rewrite (n0 = 1 + (n0 -1)).
+  replace (abs (1 + (n0 -1))) with (S (abs (n0 - 1))). simpl. auto.
+  zify. subst. intuition.
+
+  xgo*.
+Qed.
 
 
 
